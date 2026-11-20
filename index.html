@@ -130,6 +130,7 @@ body {
 .skip:focus-visible { outline: 1px dotted var(--sky); }
 .skip { flex: none; }
 .skip svg { width: 14px; height: 14px; fill: currentColor; }
+.skip-note { text-align: right; font-size: 8px; line-height: 1; color: var(--dim); margin-top: -3px; }
 .player #pl-vol {
   position: absolute; top: 8px; bottom: 8px; right: 8px;
   -webkit-appearance: none; appearance: none;
@@ -235,6 +236,7 @@ figcaption { color: var(--dim); margin-top: 4px; }
     </div>
     <button class="skip" id="pl-skip" type="button" aria-label="Skip to next song"><svg viewBox="0 0 24 24"><path d="M6 5l9 7-9 7zM16 5h2.5v14H16z"/></svg></button>
   </div>
+  <div class="skip-note" id="pl-skip-note" hidden>Skip for next song</div>
   <input id="pl-vol" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="Volume">
 </div>
 
@@ -802,6 +804,7 @@ const DiscordRender = (() => {
   const ARCHIVE_REPO = "i6y/Pico-Doc";
   const ARCHIVE_PATH = "archive/picos-quest-for-power.json";
   const ARCHIVE_CHANNEL = "picos-quest-for-power";
+  const ARCHIVE_INTRO = "```ansi\n\x1b[38;2;200;40;40mThe following messages below are a compilation of Pico's ongoing character arc about his plan to obtain the Solver and his descent into power-hungry madness. It includes interactions between Pico and TricksterVonEyesore's LaVaithan, Pico and Arabella, and some of Pico's own thoughts.\x1b[0m\n```";
 
   async function fetchArchive() {
     try {
@@ -837,7 +840,8 @@ const DiscordRender = (() => {
       <div class="ln dim">Archive:  picos-quest-for-power.zip  (${from})</div>
       <div class="ln dim">  inflating: #${ARCHIVE_CHANNEL}  ${numbers.length} messages</div>
       <div class="ln dim">. . .</div>`);
-    const items = numbers.map(n => DiscordRender.renderMessage(n, channel[String(n)]));
+    const intro = DiscordRender.renderMessage(0, ARCHIVE_INTRO);
+    const items = [intro, ...numbers.map(n => DiscordRender.renderMessage(n, channel[String(n)]))];
     return { head, items };
   }
 
@@ -969,21 +973,35 @@ const DiscordRender = (() => {
   }
   const plSkip = document.getElementById("pl-skip");
   const canSkip = () => mode !== "gate" && !!P().playlist && P().playlist.includes(currentFile());
-  function syncSkip() { plSkip.classList.toggle("off", !canSkip()); plSkip.setAttribute("aria-disabled", String(!canSkip())); }
-  document.getElementById("player").addEventListener("pointerup", () => setTimeout(() => screen.focus({ preventScroll: true }), 0));
-  plSkip.addEventListener("click", () => {
-    if (!canSkip()) return;
+  const plSkipNote = document.getElementById("pl-skip-note");
+  function syncSkip() {
+    const on = canSkip();
+    plSkip.classList.toggle("off", !on);
+    plSkip.setAttribute("aria-disabled", String(!on));
+    plSkipNote.hidden = !on;
+    music.loop = !on;
+  }
+  function nextSong() {
     const list = P().playlist;
     P().track = list[(list.indexOf(currentFile()) + 1) % list.length];
     userPaused = false;
     setTrack(P().track);
+  }
+  music.addEventListener("ended", () => {
+    if (!canSkip()) return;
+    resumeAt[currentFile()] = 0;
+    nextSong();
+  });
+  document.getElementById("player").addEventListener("pointerup", () => setTimeout(() => screen.focus({ preventScroll: true }), 0));
+  plSkip.addEventListener("click", () => {
+    if (canSkip()) nextSong();
   });
   showSong();
   const resumeAt = {};
   function setTrack(src) {
     const cur = currentFile();
     if (cur === src) return;
-    if (cur) resumeAt[cur] = music.currentTime;
+    if (cur) resumeAt[cur] = music.ended ? 0 : music.currentTime;
     music.src = src;
     showSong();
     syncSkip();
