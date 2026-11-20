@@ -818,9 +818,20 @@ const DiscordRender = (() => {
     }
   }
 
+  function archiveMessages(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("archive is not a JSON object");
+    const values = Object.values(data);
+    if (values.every(v => typeof v === "string")) return data;
+    const wrapped = data[ARCHIVE_CHANNEL];
+    if (wrapped && typeof wrapped === "object" && !Array.isArray(wrapped)) return wrapped;
+    const first = values.find(v => v && typeof v === "object" && !Array.isArray(v));
+    if (first) return first;
+    throw new Error("no messages found in archive");
+  }
+
   async function loadArchive() {
     const { data, from } = await fetchArchive();
-    const channel = data[ARCHIVE_CHANNEL] || Object.values(data)[0] || {};
+    const channel = archiveMessages(data);
     const numbers = Object.keys(channel).map(Number).filter(n => !Number.isNaN(n)).sort((a, b) => a - b);
     const head = frag(`
       <div class="ln dim">Archive:  picos-quest-for-power.zip  (${from})</div>
